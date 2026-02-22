@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css"/>
 
 <style>
-#map{height:400px;}
+#map{height:420px;}
 </style>
 </head>
 
@@ -25,12 +25,13 @@
 
 <c:if test="${not empty resultList}">
 <p class="text-muted">
-Showing first 500 records for performance. Full data available in CSV download.
+Showing first 500 records for performance.
 </p>
 
 <table class="table table-bordered table-striped">
 <thead class="table-dark">
 <tr>
+<th>UID</th>
 <th>Latitude</th>
 <th>Longitude</th>
 <th>DIGIPIN</th>
@@ -40,6 +41,7 @@ Showing first 500 records for performance. Full data available in CSV download.
 <tbody>
 <c:forEach var="r" items="${resultList}">
 <tr>
+<td>${r.uid}</td>
 <td>${r.lat}</td>
 <td>${r.lon}</td>
 <td>${r.digipin}</td>
@@ -53,9 +55,11 @@ Showing first 500 records for performance. Full data available in CSV download.
 
 <h5>Map Preview</h5>
 
+<!-- ⭐ UNIVERSAL SEARCH -->
 <div class="mb-3">
-<input type="text" id="searchDigipin" class="form-control" placeholder="Enter DIGIPIN to zoom">
-<button class="btn btn-warning mt-2" onclick="searchMarker()">Search DIGIPIN</button>
+<input type="text" id="searchInput" class="form-control"
+placeholder="Search UID / DIGIPIN / Latitude,Longitude (e.g 22.57,88.36)">
+<button class="btn btn-warning mt-2" onclick="searchMarker()">Search</button>
 </div>
 
 <div id="map"></div>
@@ -74,45 +78,64 @@ Showing first 500 records for performance. Full data available in CSV download.
 <c:if test="${not empty resultList}">
 <script>
 
-var map = L.map('map',{zoomControl:true})
+// ⭐ MAP INIT
+var map=L.map('map',{zoomControl:true})
 .setView([22.9734,78.6569],5);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
- attribution:'© OpenStreetMap'
-}).addTo(map);
+/////////////////////////
+// ⭐ MULTIPLE BASEMAPS
+/////////////////////////
 
-var clusterGroup = L.markerClusterGroup();
+var osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
 
-var markerMap = {};
-var bounds = L.latLngBounds([]);
+var cartoLight=L.tileLayer(
+'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png');
 
-var blueIcon = new L.Icon({
- iconUrl:'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
- iconSize:[32,32],
- iconAnchor:[16,32]
-});
+var cartoDark=L.tileLayer(
+'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png');
 
-var greenIcon = new L.Icon({
- iconUrl:'https://maps.google.com/mapfiles/ms/icons/green-dot.png',
- iconSize:[32,32],
- iconAnchor:[16,32]
-});
+var esriSat=L.tileLayer(
+'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
 
-// ⭐ ULTRA FAST JSON DATA
-var locations = ${jsonData};
+var topo=L.tileLayer(
+'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png');
+
+osm.addTo(map);
+
+var baseMaps={
+ "OpenStreetMap":osm,
+ "Carto Light":cartoLight,
+ "Carto Dark":cartoDark,
+ "ESRI Satellite":esriSat,
+ "OpenTopoMap":topo
+};
+
+L.control.layers(baseMaps).addTo(map);
+
+/////////////////////////
+// ⭐ CLUSTER GROUP
+/////////////////////////
+
+var clusterGroup=L.markerClusterGroup();
+var markerMap={};
+var bounds=L.latLngBounds([]);
+
+// ⭐ FAST JSON FROM SERVLET
+var locations=${jsonData};
 
 locations.forEach(function(r){
 
- var iconToUse = "${mode}"==="encode"?blueIcon:greenIcon;
+ var marker=L.marker([r.lat,r.lon]);
 
- var marker = L.marker([r.lat,r.lon],{icon:iconToUse});
-
- markerMap[r.digipin] = marker;
+ // store by uid + digipin
+ markerMap[r.uid]=marker;
+ markerMap[r.digipin]=marker;
 
  marker.bindPopup(
-  "<b>DIGIPIN:</b>"+r.digipin+
-  "<br><b>Lat:</b>"+r.lat+
-  "<br><b>Lon:</b>"+r.lon
+ "<b>UID:</b>"+r.uid+
+ "<br><b>DIGIPIN:</b>"+r.digipin+
+ "<br><b>Latitude:</b>"+r.lat+
+ "<br><b>Longitude:</b>"+r.lon
  );
 
  clusterGroup.addLayer(marker);
@@ -122,20 +145,44 @@ locations.forEach(function(r){
 map.addLayer(clusterGroup);
 
 if(bounds.isValid()){
- map.flyToBounds(bounds,{padding:[50,50],duration:1.5});
+ map.fitBounds(bounds);
 }
+
+/////////////////////////
+// ⭐ SMART SEARCH SYSTEM
+/////////////////////////
 
 function searchMarker(){
 
- var dp=document.getElementById("searchDigipin").value.trim();
+ var val=document.getElementById("searchInput").value.trim();
 
- if(markerMap[dp]){
-   var marker=markerMap[dp];
+ // 🔎 CASE 1 — UID or DIGIPIN
+ if(markerMap[val]){
+   var marker=markerMap[val];
    map.flyTo(marker.getLatLng(),16,{duration:1.5});
    marker.openPopup();
- }else{
-   alert("DIGIPIN not found on map");
+   return;
  }
+
+ // 🔎 CASE 2 — LAT,LON search
+ if(val.includes(",")){
+
+   var parts=val.split(",");
+
+   var lat=parseFloat(parts[0]);
+   var lon=parseFloat(parts[1]);
+
+   if(!isNaN(lat)&&!isNaN(lon)){
+     map.flyTo([lat,lon],16,{duration:1.5});
+     L.popup()
+      .setLatLng([lat,lon])
+      .setContent("Latitude:"+lat+"<br>Longitude:"+lon)
+      .openOn(map);
+     return;
+   }
+ }
+
+ alert("UID / DIGIPIN / Latitude,Longitude not found");
 }
 
 </script>

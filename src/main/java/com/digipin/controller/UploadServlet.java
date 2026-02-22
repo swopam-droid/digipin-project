@@ -19,47 +19,62 @@ public class UploadServlet extends HttpServlet {
             throws ServletException, IOException {
 
         String mode = req.getParameter("mode");
-
         Part filePart = req.getPart("file");
 
-        // ⭐ try-with-resources = auto close stream (safer)
         try(BufferedReader br = new BufferedReader(
-                new InputStreamReader(filePart.getInputStream(), StandardCharsets.UTF_8), 8192
-        )) {
+                new InputStreamReader(filePart.getInputStream(), StandardCharsets.UTF_8),8192)) {
 
             DigipinService service = new DigipinService();
-
-            // ⭐ Pre-sized list for big CSV
             List<Location> list = new ArrayList<>(10000);
+
+            // ⭐ READ HEADER
+            String headerLine = br.readLine();
+            String[] headers = headerLine.split(",");
+
+            int uidIndex=-1, latIndex=-1, lonIndex=-1;
+
+            for(int i=0;i<headers.length;i++){
+                String h=headers[i].trim();
+                if(h.equalsIgnoreCase("uid")) uidIndex=i;
+                if(h.equalsIgnoreCase("Latitude")) latIndex=i;
+                if(h.equalsIgnoreCase("Longitude")) lonIndex=i;
+            }
+
+            if(latIndex==-1 || lonIndex==-1){
+                throw new ServletException("CSV must contain Latitude and Longitude headers");
+            }
 
             String line;
 
-            br.readLine(); // skip header
-
-            while((line = br.readLine()) != null){
+            while((line=br.readLine())!=null){
 
                 if(line.trim().isEmpty()) continue;
 
                 try{
 
-                    String[] data = line.split(",");
+                    String[] data=line.split(",");
+
+                    String uid="";
+                    if(uidIndex!=-1 && uidIndex<data.length){
+                        uid=data[uidIndex].trim();
+                    }
 
                     if("encode".equals(mode)){
 
-                        double lat = Double.parseDouble(data[0].trim());
-                        double lon = Double.parseDouble(data[1].trim());
+                        double lat=Double.parseDouble(data[latIndex].trim());
+                        double lon=Double.parseDouble(data[lonIndex].trim());
 
-                        String digipin = service.encode(lat,lon);
+                        String digipin=service.encode(lat,lon);
 
-                        list.add(new Location(lat,lon,digipin));
+                        list.add(new Location(uid,lat,lon,digipin));
 
                     }else{
 
-                        String dp = data[0].trim();
+                        String dp=data[0].trim();
 
-                        double[] coord = service.decode(dp);
+                        double[] coord=service.decode(dp);
 
-                        list.add(new Location(coord[0],coord[1],dp));
+                        list.add(new Location(uid,coord[0],coord[1],dp));
                     }
 
                 }catch(Exception e){
@@ -67,45 +82,37 @@ public class UploadServlet extends HttpServlet {
                 }
             }
 
-            // ⭐ Show only 500 rows in table UI
             List<Location> displayList =
                     list.size()>500 ? list.subList(0,500) : list;
 
             req.setAttribute("resultList",displayList);
             req.getSession().setAttribute("resultList",list);
             req.setAttribute("mode",mode);
-
-            // ⭐ Ultra-fast JSON data for map
-            String jsonData = convertToJson(displayList);
-            req.setAttribute("jsonData",jsonData);
+            req.setAttribute("jsonData",convertToJson(displayList));
 
             req.getRequestDispatcher("result.jsp").forward(req,res);
         }
     }
 
-    // ⭐ JSON CONVERTER (SAFE VERSION)
     private String convertToJson(List<Location> list){
 
-        StringBuilder json = new StringBuilder("[");
+        StringBuilder json=new StringBuilder("[");
+
         for(int i=0;i<list.size();i++){
 
-            Location l = list.get(i);
+            Location l=list.get(i);
 
             json.append("{")
-                    .append("\"lat\":").append(l.getLat()).append(",")
-                    .append("\"lon\":").append(l.getLon()).append(",")
-                    .append("\"digipin\":\"").append(escapeJson(l.getDigipin())).append("\"")
-                    .append("}");
+                .append("\"uid\":\"").append(l.getUid()).append("\",")
+                .append("\"lat\":").append(l.getLat()).append(",")
+                .append("\"lon\":").append(l.getLon()).append(",")
+                .append("\"digipin\":\"").append(l.getDigipin()).append("\"")
+                .append("}");
 
             if(i<list.size()-1) json.append(",");
         }
+
         json.append("]");
         return json.toString();
-    }
-
-    // ⭐ Prevent JSON breaking if special chars appear
-    private String escapeJson(String text){
-        if(text == null) return "";
-        return text.replace("\"","\\\"");
     }
 }

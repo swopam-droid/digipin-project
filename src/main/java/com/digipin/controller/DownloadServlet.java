@@ -1,7 +1,3 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.digipin.controller;
 
 import com.digipin.model.Location;
@@ -9,35 +5,33 @@ import com.digipin.model.Location;
 import javax.servlet.*;
 import javax.servlet.annotation.*;
 import javax.servlet.http.*;
-
 import java.io.*;
 import java.util.*;
 
 @WebServlet("/download")
 public class DownloadServlet extends HttpServlet {
 
-    protected void doGet(HttpServletRequest req, HttpServletResponse res)
-            throws ServletException, IOException {
+    protected void doGet(HttpServletRequest req,HttpServletResponse res)
+            throws ServletException,IOException{
 
-        // Get result list stored in session
-        List<Location> list = (List<Location>) req.getSession().getAttribute("resultList");
+        List<Location> list =
+                (List<Location>) req.getSession().getAttribute("resultList");
 
-        // Set response type
         res.setContentType("text/csv");
-        res.setHeader("Content-Disposition", "attachment; filename=digipin_result.csv");
+        res.setHeader("Content-Disposition","attachment; filename=result.csv");
 
-        PrintWriter out = res.getWriter();
+        PrintWriter writer=res.getWriter();
 
-        // CSV Header
-        out.println("lat,lon,digipin");
+        writer.println("uid,Latitude,Longitude,DIGIPIN");
 
-        if (list != null) {
-            for (Location loc : list) {
-                out.println(loc.getLat() + "," + loc.getLon() + "," + loc.getDigipin());
-            }
+        for(Location l:list){
+
+            writer.println(
+                l.getUid()+","+
+                l.getLat()+","+
+                l.getLon()+","+
+                l.getDigipin()
+            );
         }
-
-        out.flush();
-        out.close();
     }
 }
