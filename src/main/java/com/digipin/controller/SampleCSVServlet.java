@@ -1,14 +1,11 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.digipin.controller;
 
 import javax.servlet.*;
 import javax.servlet.annotation.*;
 import javax.servlet.http.*;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.PrintWriter;
 
 @WebServlet("/samplecsv")
 public class SampleCSVServlet extends HttpServlet {
@@ -18,27 +15,42 @@ public class SampleCSVServlet extends HttpServlet {
 
         String type = req.getParameter("type");
 
-        res.setContentType("text/csv");
-
-        if ("decode".equals(type)) {
-            res.setHeader("Content-Disposition", "attachment; filename=sample_decode.csv");
-        } else {
-            res.setHeader("Content-Disposition", "attachment; filename=sample_encode.csv");
+        // ⭐ SAFETY CHECK
+        if(type == null){
+            type = "";
         }
+
+        // ⭐ SET FILE NAME BASED ON MODE
+        String fileName;
+
+        if("encode".equalsIgnoreCase(type)){
+            fileName = "To_Digipin.csv";
+        }else{
+            fileName = "To_Latitude_Longitude.csv";
+        }
+
+        res.setContentType("text/csv");
+        res.setHeader("Content-Disposition",
+                "attachment; filename=\"" + fileName + "\"");
 
         PrintWriter out = res.getWriter();
 
-        // Encode sample
-        if ("decode".equals(type)) {
+        // ⭐ TO DIGIPIN SAMPLE
+        if("encode".equalsIgnoreCase(type)){
 
-            out.println("digipin");
-            out.println("FC9-M7M-7JFK");
+            out.println("uid,Latitude,Longitude");
+            out.println("U001,22.5726,88.3639");
+            out.println("U002,28.6139,77.2090");
+            out.println("U003,19.0760,72.8777");
 
-        } else {
+        }
+        // ⭐ TO LATITUDE LONGITUDE SAMPLE
+        else{
 
-            out.println("lat,lon");
-            out.println("22.5726,88.3639");
-            out.println("28.6139,77.2090");
+            out.println("uid,digipin");
+            out.println("U001,FC9-M7M-7JFK");
+            out.println("U002,FJ3-K4P-TM56");
+            out.println("U003,FC9-3C9-7JFT");
         }
 
         out.flush();
