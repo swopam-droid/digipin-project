@@ -22,7 +22,7 @@
 
             /* NAVBAR */
             .navbar{
-                background:#0D1A24;
+                background:#0B1F2A;
                 border-bottom:1px solid rgba(255,255,255,0.08);
             }
 

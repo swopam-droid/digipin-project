@@ -31,6 +31,7 @@ public class DownloadServlet extends HttpServlet {
 
     protected void doGet(HttpServletRequest req,HttpServletResponse res)
             throws ServletException,IOException{
+        System.setProperty("org.geotools.referencing.forceXY", "true");
         res.setCharacterEncoding("UTF-8");
         String format = req.getParameter("format");
 if(format == null) format = "csv";
@@ -191,10 +192,19 @@ writer.close();
 
     dataStore.setCharset(java.nio.charset.StandardCharsets.UTF_8);
 
-    String typeSpec = "the_geom:Point:srid=4326,uid:String,digipin:String";
-    SimpleFeatureType TYPE = DataUtilities.createType("Location", typeSpec);
+    SimpleFeatureTypeBuilder builderType = new SimpleFeatureTypeBuilder();
+
+builderType.setName("Location");
+builderType.setCRS(DefaultGeographicCRS.WGS84); // 🔥 IMPORTANT
+
+builderType.add("the_geom", Point.class);
+builderType.add("uid", String.class);
+builderType.add("digipin", String.class);
+
+SimpleFeatureType TYPE = builderType.buildFeatureType();
 
     dataStore.createSchema(TYPE);
+    dataStore.forceSchemaCRS(DefaultGeographicCRS.WGS84);
 
     GeometryFactory geometryFactory = new GeometryFactory();
 
@@ -258,8 +268,16 @@ private void exportGeoPackage(List<Location> list, HttpServletResponse res) thro
     GeoPackage geopkg = new GeoPackage(gpkgFile);
     geopkg.init();
 
-    String typeSpec = "the_geom:Point:srid=4326,uid:String,digipin:String";
-    SimpleFeatureType TYPE = DataUtilities.createType("Location", typeSpec);
+    SimpleFeatureTypeBuilder builderType = new SimpleFeatureTypeBuilder();
+
+builderType.setName("Location");
+builderType.setCRS(DefaultGeographicCRS.WGS84); // 🔥 IMPORTANT
+
+builderType.add("the_geom", Point.class);
+builderType.add("uid", String.class);
+builderType.add("digipin", String.class);
+
+SimpleFeatureType TYPE = builderType.buildFeatureType();
 
     GeometryFactory geometryFactory = new GeometryFactory();
     SimpleFeatureBuilder builder = new SimpleFeatureBuilder(TYPE);
@@ -284,16 +302,17 @@ private void exportGeoPackage(List<Location> list, HttpServletResponse res) thro
     FeatureEntry entry = new FeatureEntry();
 entry.setTableName("locations");
 entry.setSrid(4326);
-
+entry.setBounds(collection.getBounds());
 geopkg.add(entry, collection);
     geopkg.close();
 
-    res.setContentType("application/octet-stream");
+    res.setContentType("application/geopackage+sqlite3");
     res.setHeader("Content-Disposition", "attachment; filename=result.gpkg");
 
-    OutputStream out = res.getOutputStream();
-Files.copy(gpkgFile.toPath(), out);
-out.flush();
+    try(OutputStream out = res.getOutputStream()){
+    Files.copy(gpkgFile.toPath(), out);
+    out.flush();
+}
 gpkgFile.delete();
 }
 }
