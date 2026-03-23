@@ -28,8 +28,9 @@ body{
     box-shadow:0 25px 60px rgba(0,0,0,0.5);
     padding:35px;
     transition:.3s ease;
-    height: auto;
+    height: 100%;
     overflow: visible;
+    
     
     
 }
@@ -224,18 +225,29 @@ class="alert alert-info d-none d-flex justify-content-between align-items-center
             <h6 class="text-light mt-3 mb-2">
      Calculate The Road Distance (Choose Your Travel Mode)
 </h6>
+            
     <div class="d-flex gap-2">
-        
     <button id="carBtn" class="btn btn-success w-50"
         onclick="calculateRoute('DRIVING')">
-    🚗 Car
-</button>
+        🚗 Car
+    </button>
 
-<button id="walkBtn" class="btn btn-secondary w-50"
+    <button id="walkBtn" class="btn btn-secondary w-50"
         onclick="calculateRoute('WALKING')">
-    🚶 Walk
-</button>
+        🚶 Walk
+    </button>
 </div>
+            
+<!-- ✅ CORRECT PLACEMENT -->
+<div class="mt-3">
+    <button id="navBtn"
+        class="btn btn-primary w-100"
+        disabled
+        onclick="openGoogleMapsNavigation()">
+        🧭 Open in Google Maps
+    </button>
+</div>
+</div>          
 </div>
     </div>
 </div>   
@@ -256,7 +268,9 @@ class="alert alert-info d-none d-flex justify-content-between align-items-center
 <script src="https://unpkg.com/leaflet.fullscreen@1.6.0/Control.FullScreen.js"></script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyArzYwAK0Oa_5pvGc_K3w76aeDhSuhs1nk"></script>
 <script>
-
+let currentSource = null;
+let currentDestination = null;
+let currentMode = "DRIVING";
 // ===== MINI MAP =====
 var singleMap = L.map('singleMap', {
     zoomControl: false,   // disable default zoom
@@ -541,7 +555,11 @@ function detectMyLocation(){
 
 }
 function resetMap(){
-
+    
+    currentSource = null;
+currentDestination = null;
+currentMode = "DRIVING";
+document.getElementById("navBtn").disabled = true;
     // Clear input fields
     document.getElementById("singleLat").value = "";
     document.getElementById("singleLon").value = "";
@@ -682,6 +700,17 @@ dest.bindPopup(
     singleMap.fitBounds(routeLine.getBounds());
 }
 function runGoogleRoute(sLat, sLon, dLat, dLon, srcDP, destDP, mode){
+    // ✅ STORE FOR GOOGLE NAVIGATION
+    currentSource = {
+    lat: parseFloat(sLat),
+    lon: parseFloat(sLon)
+};
+
+currentDestination = {
+    lat: parseFloat(dLat),
+    lon: parseFloat(dLon)
+};
+    currentMode = mode;
     showResult("Calculating route...");
 
 let directionsService = new google.maps.DirectionsService();
@@ -693,7 +722,7 @@ directionsService.route({
 }, function(result, status){
 
     if(status === "OK"){
-
+        document.getElementById("navBtn").disabled = false;
         let leg = result.routes[0].legs[0];
 let distance = leg.distance.text + " • " + leg.duration.text;
 
@@ -787,7 +816,32 @@ function highlightMode(mode){
         walk.classList.add("btn-warning");
     }
 }
+let navWindow = null;
+
+function openGoogleMapsNavigation(){
+
+    if(!currentSource || !currentDestination){
+        alert("Please calculate route first");
+        return;
+    }
+
+    let mode = currentMode === "WALKING" ? "walking" : "driving";
+
+    let url = "https://www.google.com/maps/dir/?api=1"
+        + "&origin=" + currentSource.lat + "," + currentSource.lon
+        + "&destination=" + currentDestination.lat + "," + currentDestination.lon
+        + "&travelmode=" + mode;
+
+    if(navWindow && !navWindow.closed){
+        navWindow.location.href = url;
+        navWindow.focus();
+    }else{
+        navWindow = window.open(url, "_blank");
+    }
+}
 </script>
 
 </body>
 </html>
+
+
