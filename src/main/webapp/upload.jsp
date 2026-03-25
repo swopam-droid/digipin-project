@@ -95,10 +95,13 @@ body{
     transform:translateY(-2px);
 }
 
+#mapContainer{
+    height:350px;
+}
+
 #singleMap{
-    height:280px;
+    height:100%;
     border-radius:18px;
-    margin-top:15px;
 }
 </style>
 </head>
@@ -254,7 +257,12 @@ class="alert alert-info d-none d-flex justify-content-between align-items-center
 
 </div>
 
-<div id="singleMap"></div>
+<div id="mapContainer" style="position:relative;">
+
+   
+
+    <!-- MAP -->
+    <div id="singleMap"></div>
 
 </div>
 </div>
@@ -273,13 +281,46 @@ let currentDestination = null;
 let currentMode = "DRIVING";
 // ===== MINI MAP =====
 var singleMap = L.map('singleMap', {
+   
     zoomControl: false,   // disable default zoom
     fullscreenControl: true,
     fullscreenControlOptions: {
         position: 'topright'   // fullscreen on right
     }
 }).setView([22.9734,78.6569],5);
+ // 🔍 MOVE SEARCH INTO MAP (FIX FULLSCREEN ISSUE)
+var searchControl = L.control({ position: 'topleft' });
 
+searchControl.onAdd = function(map) {
+
+    var div = L.DomUtil.create('div');
+
+    div.innerHTML = `
+        <div style="
+            background:white;
+            padding:6px;
+            border-radius:6px;
+            box-shadow:0 2px 6px rgba(0,0,0,0.3);
+            display:flex;
+            width:260px;
+        ">
+            <input id="searchInputMap"
+                   type="text"
+                   placeholder="Search Address / Lat,Lng / DIGIPIN"
+                   style="flex:1;border:none;outline:none;padding:4px;">
+            <button onclick="searchLocationFromMap()" 
+                    style="border:none;background:#ffc107;padding:4px 8px;cursor:pointer;">
+                🔍
+            </button>
+        </div>
+    `;
+
+    L.DomEvent.disableClickPropagation(div);
+
+    return div;
+};
+
+searchControl.addTo(singleMap);
 // Add zoom separately on left
 L.control.zoom({
     position: 'topleft'
@@ -674,6 +715,7 @@ routeLine = L.polyline(latlngs, {
             iconSize: [32,32]
         })
     }).addTo(singleMap);
+    
 
     // Destination marker (red)
     let dest = L.marker([dLat, dLon], {
@@ -682,17 +724,27 @@ routeLine = L.polyline(latlngs, {
             iconSize: [32,32]
         })
     }).addTo(singleMap);
+    
 
     routeMarkers.push(src, dest);
 
    let icon = (mode === "WALKING") ? "🚶" : "🚗";
 let modeText = (mode === "WALKING") ? "Walking" : "Driving";
 
+src.bindPopup(
+    "🟢 Source: " + srcDP +
+    "<br>🔴 Destination: " + destDP +
+    "<br>🟢 Source Coordinates: " + Number(sLat).toFixed(6) + "," + Number(sLon).toFixed(6) +
+    "<br>🔴 Destination Coordinates: " + Number(dLat).toFixed(6) + "," + Number(dLon).toFixed(6) +
+    "<br>" + icon + " Mode: " + modeText +
+    "<br>📏 Distance: " + distance
+);
+
 dest.bindPopup(
-    "📍 Source: " + srcDP +
-"<br>📍 Destination: " + destDP +
-"<br>📌 Source Coordinates: " + Number(sLat).toFixed(6) + "," + Number(sLon).toFixed(6) +
-"<br>📌 Destination Coordinates: " + Number(dLat).toFixed(6) + "," + Number(dLon).toFixed(6) +
+    "🟢 Source: " + srcDP +
+"<br>🔴 Destination: " + destDP +
+"<br>🟢 Source Coordinates: " + Number(sLat).toFixed(6) + "," + Number(sLon).toFixed(6) +
+"<br>🔴 Destination Coordinates: " + Number(dLat).toFixed(6) + "," + Number(dLon).toFixed(6) +
     "<br>" + icon + " Mode: " + modeText +
     "<br>📏 Distance: " + distance
 ).openPopup();
@@ -839,6 +891,107 @@ function openGoogleMapsNavigation(){
         navWindow = window.open(url, "_blank");
     }
 }
+
+function searchLocationFromMap(){
+    
+    let input = document.getElementById("searchInputMap").value.trim();
+
+    if(!input){
+        alert("Enter something to search");
+        return;
+    }
+
+    // LAT,LON
+    if(input.includes(",")){
+        let parts = input.split(",");
+        let lat = parseFloat(parts[0].trim());
+        let lon = parseFloat(parts[1].trim());
+
+        if(!isNaN(lat) && !isNaN(lon)){
+            showMarker(lat, lon, "Manual Input");
+
+            fetch("singleconvert?mode=encode&lat=" + lat + "&lon=" + lon)
+            .then(r=>r.text())
+            .then(data=>{
+                showResult("DIGIPIN: " + data);
+        document.getElementById("searchInputMap").value = "";
+        document.getElementById("searchInputMap").focus(); 
+            });
+
+            return;
+        }
+    }
+
+    // DIGIPIN
+    if(/^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{4}$/i.test(input)){
+        fetch("singleconvert?mode=decode&digipin=" + encodeURIComponent(input))
+        .then(r=>r.text())
+        .then(data=>{
+            if(data.includes(",")){
+                let arr = data.split(",");
+                showMarker(arr[0], arr[1], input);
+                showResult("Latitude,Longitude: " + data);
+                document.getElementById("searchInputMap").value = "";
+                document.getElementById("searchInputMap").focus(); 
+            }else{
+                alert("Invalid DIGIPIN");
+document.getElementById("searchInputMap").value = "";
+document.getElementById("searchInputMap").focus(); 
+            }
+        });
+        return;
+    }
+
+    // ADDRESS
+    fetch("https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(input), {
+        headers: {
+            "Accept": "application/json",
+            "User-Agent": "DigipinApp/1.0"
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+
+        if(data.length === 0){
+            alert("Location not found");
+document.getElementById("searchInputMap").value = "";
+document.getElementById("searchInputMap").focus();   // ✅ ADD
+return;
+
+        }
+
+        let lat = data[0].lat;
+        let lon = data[0].lon;
+
+        showMarker(lat, lon, input);
+
+        fetch("singleconvert?mode=encode&lat=" + lat + "&lon=" + lon)
+        .then(r=>r.text())
+        .then(dp=>{
+            showResult("DIGIPIN: " + dp);
+    document.getElementById("searchInputMap").value = "";
+    document.getElementById("searchInputMap").focus(); 
+        });
+
+    })
+    .catch(()=>{
+    alert("Search error");
+    document.getElementById("searchInputMap").value = "";
+    document.getElementById("searchInputMap").focus();   // ✅ ADD
+});
+}
+
+singleMap.whenReady(() => {
+    let el = document.getElementById("searchInputMap");
+    if(el){
+        el.addEventListener("keydown", function(e){
+            if(e.key === "Enter"){
+                e.preventDefault();
+                searchLocationFromMap();
+            }
+        });
+    }
+});
 </script>
 
 </body>
