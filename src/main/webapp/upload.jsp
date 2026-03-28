@@ -103,6 +103,9 @@ body{
     height:100%;
     border-radius:18px;
 }
+#suggestionsBox {
+    z-index: 99999 !important;
+}
 </style>
 </head>
 
@@ -296,26 +299,58 @@ searchControl.onAdd = function(map) {
     var div = L.DomUtil.create('div');
 
     div.innerHTML = `
-        <div style="
-            background:white;
-            padding:6px;
-            border-radius:6px;
-            box-shadow:0 2px 6px rgba(0,0,0,0.3);
-            display:flex;
-            width:260px;
-        ">
-            <input id="searchInputMap"
-                   type="text"
-                   placeholder="Search Address / Lat,Lng / DIGIPIN"
-                   style="flex:1;border:none;outline:none;padding:4px;">
-            <button onclick="searchLocationFromMap()" 
-                    style="border:none;background:#ffc107;padding:4px 8px;cursor:pointer;">
-                🔍
-            </button>
-        </div>
-    `;
+<div style="
+    background:white;
+    padding:6px;
+    border-radius:6px;
+    box-shadow:0 2px 6px rgba(0,0,0,0.3);
+    width:260px;
+    position:relative;
+">
+
+    <div style="display:flex; align-items:center;">
+
+        <input id="searchInputMap"
+               type="text"
+               placeholder="Search Address / Lat,Lng / DIGIPIN"
+               style="
+                   flex:1;
+                   border:none;
+                   outline:none;
+                   padding:5px;
+               ">
+
+        <button onclick="searchLocationFromMap()"
+                style="
+                    border:none;
+                    background:transparent;
+                    cursor:pointer;
+                    font-size:18px;
+                    padding:4px 5px;
+                ">
+            🔍
+        </button>
+
+    </div>
+
+    <div id="suggestionsBox" style="
+        position:absolute;
+        top:100%;
+        left:0;
+        right:0;
+        background:white;
+        max-height:200px;
+        overflow-y:auto;
+        border-radius:6px;
+        display:none;
+        z-index:9999;
+        color:black;
+    "></div>
+</div>
+`;
 
     L.DomEvent.disableClickPropagation(div);
+L.DomEvent.disableScrollPropagation(div);
 
     return div;
 };
@@ -405,9 +440,24 @@ singleMap.on("click", function(e){
         return r.text();
     })
     .then(data=>{
-        showResult("DIGIPIN: " + data);
-        showMarker(lat, lon, data);
+
+    fetch("https://nominatim.openstreetmap.org/reverse?format=json&lat=" + lat + "&lon=" + lon, {
+        headers: {
+            "Accept": "application/json",
+            "User-Agent": "DigipinApp/1.0"
+        }
     })
+    .then(res => res.json())
+    .then(loc => {
+
+        let addr = loc.display_name || "";
+
+        showResult("DIGIPIN: " + data, addr);
+        showMarker(lat, lon, data, addr);
+
+    });
+
+})
     .catch(err=>{
         showResult("Error: " + err.message);
     });
@@ -433,9 +483,24 @@ document.getElementById("singleLon").addEventListener("change",function(){
      return r.text();
  })
  .then(data=>{
-     showResult("DIGIPIN: "+data);
-     showMarker(lat,lon,data);
- })
+
+    fetch("https://nominatim.openstreetmap.org/reverse?format=json&lat=" + lat + "&lon=" + lon, {
+        headers: {
+            "Accept": "application/json",
+            "User-Agent": "DigipinApp/1.0"
+        }
+    })
+    .then(res => res.json())
+    .then(loc => {
+
+        let addr = loc.display_name || "";
+
+        showResult("DIGIPIN: " + data, addr);
+        showMarker(lat, lon, data, addr);
+
+    });
+
+})
  .catch(err=>{
      showResult("Error: " + err.message);
  });
@@ -470,13 +535,18 @@ document.getElementById("singleDigipin").addEventListener("change",function(){
  }
 });
 
-function showResult(msg){
+function showResult(msg, address = ""){
 
  let box = document.getElementById("singleResult");
  let text = document.getElementById("resultText");
 
  box.classList.remove("d-none");
- text.innerText = msg;   // safer than innerHTML
+
+ if(address){
+     text.innerText = msg + " | 📍 " + address;
+ }else{
+     text.innerText = msg;
+ }
 }
 function copyResult(){
 
@@ -501,7 +571,7 @@ function copyResult(){
  });
 
 }
-function showMarker(lat, lon, label){
+function showMarker(lat, lon, digipin, address = ""){
 
  if(singleMarker){
    singleMap.removeLayer(singleMarker);
@@ -511,11 +581,13 @@ function showMarker(lat, lon, label){
      draggable: true
  }).addTo(singleMap);
 
- singleMarker.bindPopup(
-"<div style='font-weight:600;margin-bottom:4px'>DIGIPIN - "+label+"</div>"+
-"<div>Latitude : "+Number(lat).toFixed(6)+"</div>"+
-"<div>Longitude : "+Number(lon).toFixed(6)+"</div>"
-).openPopup();
+ let popupContent =
+"<div style='font-weight:600;margin-bottom:4px'>DIGIPIN - " + digipin + "</div>" +
+(address ? "<div>📍 " + address + "</div>" : "") +
+"<div>Latitude : " + Number(lat).toFixed(6) + "</div>" +
+"<div>Longitude : " + Number(lon).toFixed(6) + "</div>";
+
+singleMarker.bindPopup(popupContent).openPopup();
 
  singleMap.flyTo([lat, lon], 14,{
 duration:1.4,
@@ -540,13 +612,30 @@ singleMarker.on("dragend", function(e){
         return r.text();
     })
     .then(data=>{
-        showResult("DIGIPIN: " + data);
-        singleMarker.setPopupContent(
-"<div style='font-weight:600;margin-bottom:4px'>DIGIPIN - "+data+"</div>"+
-"<div>Latitude : "+Number(newLat).toFixed(6)+"</div>"+
-"<div>Longitude : "+Number(newLon).toFixed(6)+"</div>"
-).openPopup();
+
+    fetch("https://nominatim.openstreetmap.org/reverse?format=json&lat=" + newLat + "&lon=" + newLon, {
+        headers: {
+            "Accept": "application/json",
+            "User-Agent": "DigipinApp/1.0"
+        }
     })
+    .then(res => res.json())
+    .then(loc => {
+
+        let addr = loc.display_name || "";
+
+        showResult("DIGIPIN: " + data, addr);
+
+        singleMarker.setPopupContent(
+            "<div style='font-weight:600;margin-bottom:4px'>DIGIPIN - "+data+"</div>"+
+            (addr ? "<div>📍 " + addr + "</div>" : "") +
+            "<div>Latitude : "+Number(newLat).toFixed(6)+"</div>"+
+            "<div>Longitude : "+Number(newLon).toFixed(6)+"</div>"
+        ).openPopup();
+
+    });
+
+})
     .catch(err=>{
         showResult("Error: " + err.message);
     });
@@ -581,8 +670,23 @@ function detectMyLocation(){
     return r.text();
 })
 .then(data=>{
-    showResult("DIGIPIN: "+data);
-    showMarker(lat,lon,data);
+
+    fetch("https://nominatim.openstreetmap.org/reverse?format=json&lat=" + lat + "&lon=" + lon, {
+        headers: {
+            "Accept": "application/json",
+            "User-Agent": "DigipinApp/1.0"
+        }
+    })
+    .then(res => res.json())
+    .then(loc => {
+
+        let addr = loc.display_name || "";
+
+        showResult("DIGIPIN: " + data, addr);
+        showMarker(lat, lon, data, addr);
+
+    });
+
 })
 .catch(err=>{
     showResult("Error: " + err.message);
@@ -893,7 +997,7 @@ function openGoogleMapsNavigation(){
 }
 
 function searchLocationFromMap(){
-    
+
     let input = document.getElementById("searchInputMap").value.trim();
 
     if(!input){
@@ -901,48 +1005,82 @@ function searchLocationFromMap(){
         return;
     }
 
-    // LAT,LON
-    if(input.includes(",")){
+    // ================= LAT,LON =================
+    if(/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(input)){
+
         let parts = input.split(",");
         let lat = parseFloat(parts[0].trim());
         let lon = parseFloat(parts[1].trim());
 
         if(!isNaN(lat) && !isNaN(lon)){
-            showMarker(lat, lon, "Manual Input");
 
             fetch("singleconvert?mode=encode&lat=" + lat + "&lon=" + lon)
             .then(r=>r.text())
             .then(data=>{
-                showResult("DIGIPIN: " + data);
-        document.getElementById("searchInputMap").value = "";
-        document.getElementById("searchInputMap").focus(); 
+
+                fetch("https://nominatim.openstreetmap.org/reverse?format=json&lat=" + lat + "&lon=" + lon, {
+                    headers: {
+                        "Accept": "application/json",
+                        "User-Agent": "DigipinApp/1.0"
+                    }
+                })
+                .then(res => res.json())
+                .then(loc => {
+
+                    let addr = loc.display_name || "";
+
+                    showResult("DIGIPIN: " + data, addr);
+                    showMarker(lat, lon, data, addr);
+
+                    document.getElementById("searchInputMap").value = "";
+                    document.getElementById("searchInputMap").focus();
+                });
+
             });
 
-            return;
+            return; // ✅ stop here
         }
     }
 
-    // DIGIPIN
+    // ================= DIGIPIN =================
     if(/^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{4}$/i.test(input)){
+
         fetch("singleconvert?mode=decode&digipin=" + encodeURIComponent(input))
         .then(r=>r.text())
         .then(data=>{
+
             if(data.includes(",")){
+
                 let arr = data.split(",");
-                showMarker(arr[0], arr[1], input);
-                showResult("Latitude,Longitude: " + data);
-                document.getElementById("searchInputMap").value = "";
-                document.getElementById("searchInputMap").focus(); 
+
+                fetch("https://nominatim.openstreetmap.org/reverse?format=json&lat=" + arr[0] + "&lon=" + arr[1], {
+                    headers: {
+                        "Accept": "application/json",
+                        "User-Agent": "DigipinApp/1.0"
+                    }
+                })
+                .then(res => res.json())
+                .then(loc => {
+
+                    let addr = loc.display_name || "";
+
+                    showMarker(arr[0], arr[1], input, addr);
+                    showResult("Latitude,Longitude: " + data, addr);
+
+                    document.getElementById("searchInputMap").value = "";
+                    document.getElementById("searchInputMap").focus();
+                });
+
             }else{
                 alert("Invalid DIGIPIN");
-document.getElementById("searchInputMap").value = "";
-document.getElementById("searchInputMap").focus(); 
             }
+
         });
-        return;
+
+        return; // ✅ stop here
     }
 
-    // ADDRESS
+    // ================= ADDRESS =================
     fetch("https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(input), {
         headers: {
             "Accept": "application/json",
@@ -954,31 +1092,27 @@ document.getElementById("searchInputMap").focus();
 
         if(data.length === 0){
             alert("Location not found");
-document.getElementById("searchInputMap").value = "";
-document.getElementById("searchInputMap").focus();   // ✅ ADD
-return;
-
+            return;
         }
 
         let lat = data[0].lat;
         let lon = data[0].lon;
 
-        showMarker(lat, lon, input);
-
         fetch("singleconvert?mode=encode&lat=" + lat + "&lon=" + lon)
         .then(r=>r.text())
         .then(dp=>{
-            showResult("DIGIPIN: " + dp);
-    document.getElementById("searchInputMap").value = "";
-    document.getElementById("searchInputMap").focus(); 
+
+            showResult("DIGIPIN: " + dp, data[0].display_name);
+            showMarker(lat, lon, dp, data[0].display_name);
+
+            document.getElementById("searchInputMap").value = "";
+            document.getElementById("searchInputMap").focus();
         });
 
     })
     .catch(()=>{
-    alert("Search error");
-    document.getElementById("searchInputMap").value = "";
-    document.getElementById("searchInputMap").focus();   // ✅ ADD
-});
+        alert("Search error");
+    });
 }
 
 singleMap.whenReady(() => {
@@ -991,6 +1125,83 @@ singleMap.whenReady(() => {
             }
         });
     }
+});
+let debounceTimer;
+
+document.addEventListener("input", function(e){
+
+    if(e.target.id !== "searchInputMap") return;
+
+    clearTimeout(debounceTimer);
+
+    debounceTimer = setTimeout(() => {
+
+        let query = e.target.value.trim();
+        let box = document.getElementById("suggestionsBox");
+
+        if(query.length < 3){
+            box.style.display = "none";
+            return;
+        }
+
+        fetch("https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(query), {
+    headers: {
+        "Accept": "application/json",
+        "User-Agent": "DigipinApp/1.0"
+    }
+})
+        .then(res => res.json())
+        .then(data => {
+
+            box.innerHTML = "";
+
+            if(data.length === 0){
+                box.style.display = "none";
+                return;
+            }
+
+            data.slice(0,5).forEach(place => {
+
+                let item = document.createElement("div");
+                item.style.padding = "6px";
+                item.style.cursor = "pointer";
+                item.style.borderBottom = "1px solid #eee";
+                item.innerText = place.display_name;
+                item.onmouseover = () => item.style.background = "#f1f1f1";
+item.onmouseout = () => item.style.background = "white";
+
+                item.onclick = function(){
+
+                    box.style.display = "none";
+
+                    fetch("singleconvert?mode=encode&lat=" + place.lat + "&lon=" + place.lon)
+.then(r=>r.text())
+.then(dp=>{
+    showResult("DIGIPIN: " + dp, place.display_name);
+    showMarker(place.lat, place.lon, dp, place.display_name);
+});
+
+                    
+
+                    document.getElementById("searchInputMap").value = "";
+                    document.getElementById("searchInputMap").focus();
+                };
+
+                box.appendChild(item);
+            });
+
+            box.style.display = "block";
+        });
+
+    }, 300); // 🔥 delay
+});
+document.addEventListener("click", function(e){
+
+    let box = document.getElementById("suggestionsBox");
+
+    if(box && !e.target.closest("#searchInputMap") && !e.target.closest("#suggestionsBox")){
+    box.style.display = "none";
+}
 });
 </script>
 
